@@ -1,23 +1,36 @@
 package main
 
 import (
-	"flag"
-	"fmt"
+	"context"
 	"log"
+	"os"
+	"os/signal"
 
+	"github.com/joho/godotenv"
 	pcl "github.com/luckyComet55/marzban-api-gtw/internal/panel_client"
+	"github.com/sethvargo/go-envconfig"
 )
 
+type AppConfig struct {
+	Username       string `env:"ADMIN_USERNAME, required"`
+	Password       string `env:"ADMIN_PASSWORD, required"`
+	MarzbanBaseUrl string `env:"BASE_URL, required"`
+}
+
 func main() {
-	username := flag.String("username", "", "Marzban admin username")
-	password := flag.String("password", "", "Marzban admin password")
-	marzbanBaseUrl := flag.String("url", "", "Marzban base url")
+	_, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
 
-	flag.Parse()
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: No .env file found: %v", err)
+	}
 
-	fmt.Printf("username: %s\npassword: %s\nurl: %s\n", *username, *password, *marzbanBaseUrl)
+	var c AppConfig
+	envconfig.MustProcess(context.Background(), &c)
 
-	cli := pcl.NewMarzbanPanelClient(*marzbanBaseUrl, *username, *password)
+	log.Printf("username: %s\npassword: %s\nurl: %s\n", c.Username, c.Password, c.MarzbanBaseUrl)
+
+	cli := pcl.NewMarzbanPanelClient(c.MarzbanBaseUrl, c.Username, c.Password)
 
 	users, err := cli.GetUsers()
 	if err != nil {
@@ -25,6 +38,6 @@ func main() {
 	}
 
 	for i, user := range users {
-		fmt.Printf("user #%d %s (%s)\n", i, user.Username, user.Status)
+		log.Printf("user #%d %s (%s)\n", i, user.Username, user.Status)
 	}
 }
