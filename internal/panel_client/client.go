@@ -14,7 +14,7 @@ import (
 )
 
 type MarzbanPanelClient interface {
-	GetUsers() ([]contract.UserInfo, error)
+	GetUsers() ([]*contract.UserInfo, error)
 }
 
 type marzbanPanelAuthPair struct {
@@ -23,8 +23,8 @@ type marzbanPanelAuthPair struct {
 }
 
 type marzbanUsersResponse struct {
-	Users []contract.UserInfo `json:"users"`
-	Total uint64              `json:"total"`
+	Users []*contract.UserInfo `json:"users"`
+	Total uint64               `json:"total"`
 }
 
 type marzbanJwtData struct {
@@ -132,7 +132,7 @@ func (cli *marzbanPanelClientImpl) fetchUsers() (*http.Response, error) {
 	return requestResult, nil
 }
 
-func (cli *marzbanPanelClientImpl) GetUsers() ([]contract.UserInfo, error) {
+func (cli *marzbanPanelClientImpl) GetUsers() ([]*contract.UserInfo, error) {
 	if cli.panelAuthJwt == "" {
 		if err := cli.getJwtAccessToken(); err != nil {
 			cli.logger.Printf("error while retrieving access token: %s\n", err)
@@ -167,7 +167,7 @@ func (cli *marzbanPanelClientImpl) GetUsers() ([]contract.UserInfo, error) {
 		return nil, err
 	}
 
-	var usersReponseUnmarshalled marzbanUsersResponse
+	var usersReponseUnmarshalled *marzbanUsersResponse
 
 	if err := json.Unmarshal(responseBodyStr, &usersReponseUnmarshalled); err != nil {
 		cli.logger.Println(err)
