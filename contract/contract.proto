@@ -1,0 +1,18 @@
+syntax = "proto3";
+package luckyComet55.marzban_mgmt;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/luckyComet55/marzban-api-gtw/contract";
+
+service MarzbanManagementPanel {
+
+    rpc ListUsers (google.protobuf.Empty) returns (stream UserInfo) {}
+}
+
+message UserInfo {
+    string username = 1;
+    string status = 2;
+    uint64 used_traffic = 3;
+    repeated string config_urls = 4;
+}
