@@ -10,12 +10,9 @@ import (
 	"net/url"
 	"strings"
 
+	pcl "github.com/luckyComet55/marzban-api-gtw/infra/panel_client"
 	contract "github.com/luckyComet55/marzban-proto-contract/gen/go/contract"
 )
-
-type MarzbanPanelClient interface {
-	GetUsers() ([]*contract.UserInfo, error)
-}
 
 type marzbanPanelAuthPair struct {
 	Username string
@@ -40,7 +37,7 @@ type marzbanPanelClientImpl struct {
 	panelAuthJwt  string
 }
 
-func NewMarzbanPanelClient(panelBaseUrl, panelUsername, panelPassword string) MarzbanPanelClient {
+func NewMarzbanPanelClient(panelBaseUrl, panelUsername, panelPassword string) pcl.MarzbanPanelClient {
 	cli := &marzbanPanelClientImpl{
 		httpClient:    &http.Client{},
 		PanelBaseUrl:  panelBaseUrl,
