@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	contract "github.com/luckyComet55/marzban-api-gtw/contract"
+	contract "github.com/luckyComet55/marzban-proto-contract/gen/go/contract"
 )
 
 type MarzbanPanelClient interface {
