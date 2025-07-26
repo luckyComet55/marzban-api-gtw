@@ -7,15 +7,10 @@ import (
 	"os/signal"
 
 	"github.com/joho/godotenv"
+	cfg "github.com/luckyComet55/marzban-api-gtw/internal/config"
 	pcl "github.com/luckyComet55/marzban-api-gtw/internal/panel_client"
 	"github.com/sethvargo/go-envconfig"
 )
-
-type AppConfig struct {
-	Username       string `env:"ADMIN_USERNAME, required"`
-	Password       string `env:"ADMIN_PASSWORD, required"`
-	MarzbanBaseUrl string `env:"BASE_URL, required"`
-}
 
 func main() {
 	_, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -25,7 +20,7 @@ func main() {
 		log.Printf("Warning: No .env file found: %v", err)
 	}
 
-	var c AppConfig
+	var c cfg.AppConfig
 	envconfig.MustProcess(context.Background(), &c)
 
 	log.Printf("username: %s\npassword: %s\nurl: %s\n", c.Username, c.Password, c.MarzbanBaseUrl)
