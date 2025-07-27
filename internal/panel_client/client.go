@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
 	pcl "github.com/luckyComet55/marzban-api-gtw/infra/panel_client"
+	cfg "github.com/luckyComet55/marzban-api-gtw/internal/config"
 	contract "github.com/luckyComet55/marzban-proto-contract/gen/go/contract"
 )
 
@@ -31,17 +33,18 @@ type marzbanJwtData struct {
 
 type marzbanPanelClientImpl struct {
 	httpClient    *http.Client
-	logger        *log.Logger
+	logger        *slog.Logger
 	PanelBaseUrl  string
 	PanelAuthPair marzbanPanelAuthPair
 	panelAuthJwt  string
 }
 
-func NewMarzbanPanelClient(panelBaseUrl, panelUsername, panelPassword string) pcl.MarzbanPanelClient {
+func NewMarzbanPanelClient(c cfg.MarzbanApiGtwConfig, logger *slog.Logger) pcl.MarzbanPanelClient {
 	cli := &marzbanPanelClientImpl{
 		httpClient:    &http.Client{},
-		PanelBaseUrl:  panelBaseUrl,
-		PanelAuthPair: marzbanPanelAuthPair{panelUsername, panelPassword},
+		PanelBaseUrl:  c.MarzbanBaseUrl,
+		PanelAuthPair: marzbanPanelAuthPair{c.Username, c.Password},
+		logger:        logger,
 	}
 	err := cli.getJwtAccessToken()
 	if err != nil {
@@ -76,7 +79,7 @@ func (cli *marzbanPanelClientImpl) getJwtAccessToken() error {
 	}
 	if requestResult.StatusCode != 200 {
 		errorMessage := fmt.Sprintf("auth request resturned with %d status code", requestResult.StatusCode)
-		cli.logger.Println(errorMessage)
+		cli.logger.Error(errorMessage)
 		return errors.New(errorMessage)
 	}
 
@@ -102,7 +105,7 @@ func (cli *marzbanPanelClientImpl) fetchUsers() (*http.Response, error) {
 	usersApiUrl, err := url.ParseRequestURI(cli.PanelBaseUrl)
 
 	if err != nil {
-		cli.logger.Println(err)
+		cli.logger.Error(err.Error())
 		return nil, err
 	}
 
@@ -112,7 +115,7 @@ func (cli *marzbanPanelClientImpl) fetchUsers() (*http.Response, error) {
 	request, err := http.NewRequest("GET", stringUrl, nil)
 
 	if err != nil {
-		cli.logger.Println(err)
+		cli.logger.Error(err.Error())
 		return nil, err
 	}
 
@@ -122,7 +125,7 @@ func (cli *marzbanPanelClientImpl) fetchUsers() (*http.Response, error) {
 	requestResult, err := cli.httpClient.Do(request)
 
 	if err != nil {
-		cli.logger.Println(err)
+		cli.logger.Error(err.Error())
 		return nil, err
 	}
 
@@ -132,27 +135,27 @@ func (cli *marzbanPanelClientImpl) fetchUsers() (*http.Response, error) {
 func (cli *marzbanPanelClientImpl) GetUsers() ([]*contract.UserInfo, error) {
 	if cli.panelAuthJwt == "" {
 		if err := cli.getJwtAccessToken(); err != nil {
-			cli.logger.Printf("error while retrieving access token: %s\n", err)
+			cli.logger.Error(fmt.Sprintf("error while retrieving access token: %s\n", err))
 			return nil, err
 		}
 	}
 
 	requestResult, err := cli.fetchUsers()
 	if err != nil {
-		cli.logger.Printf("error while fetching users: %s\n", err)
+		cli.logger.Error(fmt.Sprintf("error while fetching users: %s\n", err))
 		return nil, err
 	}
 
 	if requestResult.StatusCode == 401 {
-		cli.logger.Println("access token expired, retrieving new one")
+		cli.logger.Error("access token expired, retrieving new one")
 		if err := cli.getJwtAccessToken(); err != nil {
-			cli.logger.Printf("error while retrieving access token: %s\n", err)
+			cli.logger.Error(fmt.Sprintf("error while retrieving access token: %s\n", err))
 			return nil, err
 		}
 		return cli.GetUsers()
 	} else if requestResult.StatusCode != 200 {
 		errorMessage := fmt.Sprintf("unhandled status code from Marzban: [%d] %s", requestResult.StatusCode, requestResult.Status)
-		cli.logger.Println(errorMessage)
+		cli.logger.Error(errorMessage)
 		return nil, errors.New(errorMessage)
 	}
 
@@ -160,14 +163,14 @@ func (cli *marzbanPanelClientImpl) GetUsers() ([]*contract.UserInfo, error) {
 
 	responseBodyStr, err := io.ReadAll(requestResult.Body)
 	if err != nil {
-		cli.logger.Println(err)
+		cli.logger.Error(err.Error())
 		return nil, err
 	}
 
 	var usersReponseUnmarshalled *marzbanUsersResponse
 
 	if err := json.Unmarshal(responseBodyStr, &usersReponseUnmarshalled); err != nil {
-		cli.logger.Println(err)
+		cli.logger.Error(err.Error())
 		return nil, err
 	}
 

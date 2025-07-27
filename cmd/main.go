@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 
@@ -12,20 +14,40 @@ import (
 	"github.com/sethvargo/go-envconfig"
 )
 
+type AppConfig struct {
+	Username       string `env:"ADMIN_USERNAME, required"`
+	Password       string `env:"ADMIN_PASSWORD, required"`
+	MarzbanBaseUrl string `env:"BASE_URL, required"`
+	Port           int    `env:"PORT, default=8343"`
+	Env            string `env:"ENV, required"`
+}
+
+const (
+	envDev  = "dev"
+	envProd = "prod"
+)
+
 func main() {
 	_, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
 	if err := godotenv.Load(); err != nil {
-		log.Printf("Warning: No .env file found: %v", err)
+		slog.Warn(fmt.Sprintf("Warning: No .env file found: %v", err))
 	}
 
-	var c cfg.AppConfig
+	var c AppConfig
 	envconfig.MustProcess(context.Background(), &c)
 
-	log.Printf("username: %s\npassword: %s\nurl: %s\n", c.Username, c.Password, c.MarzbanBaseUrl)
+	logger := configureLogger(c.Env)
 
-	cli := pcl.NewMarzbanPanelClient(c.MarzbanBaseUrl, c.Username, c.Password)
+	log.Printf("username: %s | password: %s | url: %s", c.Username, c.Password, c.MarzbanBaseUrl)
+
+	cli := pcl.NewMarzbanPanelClient(cfg.MarzbanApiGtwConfig{
+		Username:       c.Username,
+		Password:       c.Password,
+		MarzbanBaseUrl: c.MarzbanBaseUrl,
+		Port:           c.Port,
+	}, logger)
 
 	users, err := cli.GetUsers()
 	if err != nil {
@@ -33,6 +55,21 @@ func main() {
 	}
 
 	for i, user := range users {
-		log.Printf("user #%d %s (%s)\n", i, user.Username, user.Status)
+		logger.Debug(fmt.Sprintf("user #%d %s (%s)\n", i, user.Username, user.Status))
 	}
+}
+
+func configureLogger(env string) *slog.Logger {
+	var logger *slog.Logger
+
+	switch env {
+	case envDev:
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	case envProd:
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	default:
+		log.Fatalf("incorrect ENV type: %s\n", env)
+	}
+
+	return logger
 }
