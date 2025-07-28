@@ -1,8 +1,7 @@
-package config
+package panelclient
 
-type MarzbanApiGtwConfig struct {
+type MarzbanPanelClientConfig struct {
 	Username       string
 	Password       string
 	MarzbanBaseUrl string
-	Port           int
 }

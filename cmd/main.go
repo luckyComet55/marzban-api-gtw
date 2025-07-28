@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"github.com/joho/godotenv"
-	cfg "github.com/luckyComet55/marzban-api-gtw/internal/config"
-	pcl "github.com/luckyComet55/marzban-api-gtw/internal/panel_client"
+	app "github.com/luckyComet55/marzban-api-gtw/internal/app"
 	"github.com/sethvargo/go-envconfig"
 )
 
@@ -18,7 +18,7 @@ type AppConfig struct {
 	Username       string `env:"ADMIN_USERNAME, required"`
 	Password       string `env:"ADMIN_PASSWORD, required"`
 	MarzbanBaseUrl string `env:"BASE_URL, required"`
-	Port           int    `env:"PORT, default=8343"`
+	Port           uint64 `env:"PORT, default=8343"`
 	Env            string `env:"ENV, required"`
 }
 
@@ -38,35 +38,39 @@ func main() {
 	var c AppConfig
 	envconfig.MustProcess(context.Background(), &c)
 
-	logger := configureLogger(c.Env)
+	cliLogger := configureLogger(c.Env, "marzban_http_cli")
+	serverLogger := configureLogger(c.Env, "marzban_api_gtw_server")
 
-	log.Printf("username: %s | password: %s | url: %s", c.Username, c.Password, c.MarzbanBaseUrl)
+	application := app.NewApp(
+		serverLogger,
+		cliLogger,
+		c.Username,
+		c.Password,
+		c.MarzbanBaseUrl,
+		c.Port,
+	)
 
-	cli := pcl.NewMarzbanPanelClient(cfg.MarzbanApiGtwConfig{
-		Username:       c.Username,
-		Password:       c.Password,
-		MarzbanBaseUrl: c.MarzbanBaseUrl,
-		Port:           c.Port,
-	}, logger)
+	go func() {
+		application.MustStart()
+	}()
 
-	users, err := cli.GetUsers()
-	if err != nil {
-		log.Fatal(err)
-	}
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
 
-	for i, user := range users {
-		logger.Debug(fmt.Sprintf("user #%d %s (%s)\n", i, user.Username, user.Status))
-	}
+	<-stop
+
+	application.Stop()
+	serverLogger.Info("Gracefully stopped")
 }
 
-func configureLogger(env string) *slog.Logger {
+func configureLogger(env, componentName string) *slog.Logger {
 	var logger *slog.Logger
 
 	switch env {
 	case envDev:
-		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})).With("component", componentName)
 	case envProd:
-		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})).With("component", componentName)
 	default:
 		log.Fatalf("incorrect ENV type: %s\n", env)
 	}

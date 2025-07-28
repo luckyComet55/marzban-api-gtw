@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	pcl "github.com/luckyComet55/marzban-api-gtw/infra/panel_client"
-	cfg "github.com/luckyComet55/marzban-api-gtw/internal/config"
 	contract "github.com/luckyComet55/marzban-proto-contract/gen/go/contract"
 )
 
@@ -39,7 +38,7 @@ type marzbanPanelClientImpl struct {
 	panelAuthJwt  string
 }
 
-func NewMarzbanPanelClient(c cfg.MarzbanApiGtwConfig, logger *slog.Logger) pcl.MarzbanPanelClient {
+func NewMarzbanPanelClient(c MarzbanPanelClientConfig, logger *slog.Logger) pcl.MarzbanPanelClient {
 	cli := &marzbanPanelClientImpl{
 		httpClient:    &http.Client{},
 		PanelBaseUrl:  c.MarzbanBaseUrl,
