@@ -1,6 +1,7 @@
 package gatewayserver
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -44,4 +45,17 @@ func (s *marzbanManagementPanelServer) ListUsers(
 		}
 	}
 	return nil
+}
+
+func (s *marzbanManagementPanelServer) CreateUser(
+	ctx context.Context,
+	createUserUnfo *contract.CreateUserInfo,
+) (*contract.UserInfo, error) {
+	userInfo, err := s.marzbanPanelClient.CreateUser(createUserUnfo)
+	if err != nil {
+		errMsg := fmt.Sprintf("error on CreateUser call: %s", err.Error())
+		s.logger.Error(errMsg)
+		return nil, status.Error(codes.Internal, errMsg)
+	}
+	return userInfo, nil
 }
