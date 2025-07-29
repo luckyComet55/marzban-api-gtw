@@ -2,7 +2,6 @@ package panelclient
 
 import (
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -61,12 +60,10 @@ func (strategy marzbanLimitResetStrategy) String() string {
 }
 
 func (strategy marzbanLimitResetStrategy) MarshalJSON() ([]byte, error) {
-	log.Printf("calling strategy json marshaller with %s", strategy.String())
 	return json.Marshal(strategy.String())
 }
 
 func (strategy marzbanLimitResetStrategy) MarshalText() ([]byte, error) {
-	log.Printf("calling strategy text marshaller with %s", strategy.String())
 	return []byte(strategy.String()), nil
 }
 
