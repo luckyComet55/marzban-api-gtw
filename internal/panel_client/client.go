@@ -1,6 +1,7 @@
 package panelclient
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,27 +11,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	pcl "github.com/luckyComet55/marzban-api-gtw/infra/panel_client"
 	contract "github.com/luckyComet55/marzban-proto-contract/gen/go/contract"
 )
 
-type marzbanPanelAuthPair struct {
-	Username string
-	Password string
-}
-
-type marzbanUsersResponse struct {
-	Users []*contract.UserInfo `json:"users"`
-	Total uint64               `json:"total"`
-}
-
-type marzbanJwtData struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-}
-
-type marzbanPanelClientImpl struct {
+type marzbanPanelClient struct {
 	httpClient    *http.Client
 	logger        *slog.Logger
 	PanelBaseUrl  string
@@ -39,7 +27,7 @@ type marzbanPanelClientImpl struct {
 }
 
 func NewMarzbanPanelClient(c MarzbanPanelClientConfig, logger *slog.Logger) pcl.MarzbanPanelClient {
-	cli := &marzbanPanelClientImpl{
+	cli := &marzbanPanelClient{
 		httpClient:    &http.Client{},
 		PanelBaseUrl:  c.MarzbanBaseUrl,
 		PanelAuthPair: marzbanPanelAuthPair{c.Username, c.Password},
@@ -47,12 +35,12 @@ func NewMarzbanPanelClient(c MarzbanPanelClientConfig, logger *slog.Logger) pcl.
 	}
 	err := cli.getJwtAccessToken()
 	if err != nil {
-		log.Panic(err)
+		log.Fatal(err)
 	}
 	return cli
 }
 
-func (cli *marzbanPanelClientImpl) getJwtAccessToken() error {
+func (cli *marzbanPanelClient) getJwtAccessToken() error {
 	urlEncodedPost := url.Values{}
 	urlEncodedPost.Set("grant_type", "password")
 	urlEncodedPost.Set("username", cli.PanelAuthPair.Username)
@@ -77,7 +65,7 @@ func (cli *marzbanPanelClientImpl) getJwtAccessToken() error {
 		return err
 	}
 	if requestResult.StatusCode != 200 {
-		errorMessage := fmt.Sprintf("auth request resturned with %d status code", requestResult.StatusCode)
+		errorMessage := fmt.Sprintf("unable to authorize, auth request returned with %d status code", requestResult.StatusCode)
 		cli.logger.Error(errorMessage)
 		return errors.New(errorMessage)
 	}
@@ -100,7 +88,55 @@ func (cli *marzbanPanelClientImpl) getJwtAccessToken() error {
 	return nil
 }
 
-func (cli *marzbanPanelClientImpl) fetchUsers() (*http.Response, error) {
+func (cli *marzbanPanelClient) requestWrapper(request *http.Request) (*http.Response, error) {
+	if request.Header.Get("Authorization") == "" {
+		cli.logger.Warn(fmt.Sprintf("empty authorization for request to %s", request.URL.Path))
+	}
+
+	result, err := cli.httpClient.Do(request)
+	if err != nil {
+		cli.logger.Error(err.Error())
+		return nil, err
+	}
+	cli.logger.Info(fmt.Sprintf("request to %s returned with result %s [%d]", request.URL.Path, result.Status, result.StatusCode))
+
+	return result, nil
+}
+
+func (cli *marzbanPanelClient) requestAuthWrapper(request *http.Request) (*http.Response, error) {
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cli.panelAuthJwt))
+	result, err := cli.requestWrapper(request)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.StatusCode >= 200 && result.StatusCode < 399 {
+		return result, nil
+	}
+
+	if result.StatusCode != 401 {
+		return nil, fmt.Errorf("HTTP error %s [%d]", result.Status, result.StatusCode)
+	}
+
+	if err := cli.getJwtAccessToken(); err != nil {
+		cli.logger.Error(err.Error())
+		return nil, err
+	}
+
+	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", cli.panelAuthJwt))
+	result2, err := cli.requestWrapper(request)
+	if err != nil {
+		return nil, err
+	}
+
+	if result2.StatusCode >= 400 {
+		return nil, fmt.Errorf("HTTP error %s [%d]", result2.Status, result2.StatusCode)
+	}
+
+	return result2, nil
+}
+
+func (cli *marzbanPanelClient) fetchUsers() (*marzbanUsersResponse, error) {
 	usersApiUrl, err := url.ParseRequestURI(cli.PanelBaseUrl)
 
 	if err != nil {
@@ -112,50 +148,14 @@ func (cli *marzbanPanelClientImpl) fetchUsers() (*http.Response, error) {
 	stringUrl := usersApiUrl.String()
 
 	request, err := http.NewRequest("GET", stringUrl, nil)
-
 	if err != nil {
 		cli.logger.Error(err.Error())
 		return nil, err
 	}
 
-	bearerTokenString := fmt.Sprintf("Bearer %s", cli.panelAuthJwt)
-	request.Header.Add("Authorization", bearerTokenString)
-
-	requestResult, err := cli.httpClient.Do(request)
-
+	requestResult, err := cli.requestAuthWrapper(request)
 	if err != nil {
-		cli.logger.Error(err.Error())
 		return nil, err
-	}
-
-	return requestResult, nil
-}
-
-func (cli *marzbanPanelClientImpl) GetUsers() ([]*contract.UserInfo, error) {
-	if cli.panelAuthJwt == "" {
-		if err := cli.getJwtAccessToken(); err != nil {
-			cli.logger.Error(fmt.Sprintf("error while retrieving access token: %s\n", err))
-			return nil, err
-		}
-	}
-
-	requestResult, err := cli.fetchUsers()
-	if err != nil {
-		cli.logger.Error(fmt.Sprintf("error while fetching users: %s\n", err))
-		return nil, err
-	}
-
-	if requestResult.StatusCode == 401 {
-		cli.logger.Error("access token expired, retrieving new one")
-		if err := cli.getJwtAccessToken(); err != nil {
-			cli.logger.Error(fmt.Sprintf("error while retrieving access token: %s\n", err))
-			return nil, err
-		}
-		return cli.GetUsers()
-	} else if requestResult.StatusCode != 200 {
-		errorMessage := fmt.Sprintf("unhandled status code from Marzban: [%d] %s", requestResult.StatusCode, requestResult.Status)
-		cli.logger.Error(errorMessage)
-		return nil, errors.New(errorMessage)
 	}
 
 	defer requestResult.Body.Close()
@@ -173,5 +173,93 @@ func (cli *marzbanPanelClientImpl) GetUsers() ([]*contract.UserInfo, error) {
 		return nil, err
 	}
 
-	return usersReponseUnmarshalled.Users, nil
+	return usersReponseUnmarshalled, nil
+}
+
+func (cli *marzbanPanelClient) GetUsers() ([]*contract.UserInfo, error) {
+	users, err := cli.fetchUsers()
+	if err != nil {
+		return nil, err
+	}
+
+	return users.Users, nil
+}
+
+func (cli *marzbanPanelClient) createUser(userInfo marzbanUserConf) (*contract.UserInfo, error) {
+	usersApiUrl, err := url.ParseRequestURI(cli.PanelBaseUrl)
+
+	if err != nil {
+		cli.logger.Error(err.Error())
+		return nil, err
+	}
+
+	usersApiUrl.Path = "/api/user"
+	stringUrl := usersApiUrl.String()
+
+	cli.logger.Debug(fmt.Sprintf("%v", userInfo))
+
+	postData, err := json.Marshal(userInfo)
+	if err != nil {
+		cli.logger.Error(err.Error())
+		return nil, err
+	}
+
+	cli.logger.Debug(string(postData))
+
+	request, err := http.NewRequest("POST", stringUrl, bytes.NewReader(postData))
+
+	if err != nil {
+		cli.logger.Error(err.Error())
+		return nil, err
+	}
+
+	result, err := cli.requestAuthWrapper(request)
+	if err != nil {
+		return nil, err
+	}
+
+	defer result.Body.Close()
+
+	responseBodyStr, err := io.ReadAll(result.Body)
+	if err != nil {
+		cli.logger.Error(err.Error())
+		return nil, err
+	}
+
+	cli.logger.Debug(string(responseBodyStr))
+
+	var userCreateResult *contract.UserInfo
+	if err := json.Unmarshal(responseBodyStr, &userCreateResult); err != nil {
+		cli.logger.Error(err.Error())
+		return nil, err
+	}
+
+	return userCreateResult, nil
+}
+
+func (cli *marzbanPanelClient) CreateUser(user *contract.CreateUserInfo) (*contract.UserInfo, error) {
+	vlessProxySetting := marzbanProxySettings{
+		Id:   uuid.New(),
+		Flow: "",
+	}
+	nowTime := time.Now()
+	userData := marzbanUserConf{
+		Username: user.Username,
+		Proxies: map[marzbanProtocolType]marzbanProxySettings{
+			vlessProtocolType: vlessProxySetting,
+		},
+		Inbounds: map[marzbanProtocolType][]string{
+			vlessProtocolType: []string{user.ProxyProtocol},
+		},
+		DataLimit:              0,
+		DataLimitResetStrategy: noResetStrategy,
+		Expire:                 0,
+		NextPlan:               nil,
+		Note:                   "",
+		Status:                 activeStatus,
+		OnHoldExpireDuration:   0,
+		OnHoldTimeout:          nowTime,
+	}
+
+	return cli.createUser(userData)
 }
