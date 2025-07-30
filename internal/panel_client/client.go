@@ -11,11 +11,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
-	"github.com/google/uuid"
 	pcl "github.com/luckyComet55/marzban-api-gtw/infra/panel_client"
-	contract "github.com/luckyComet55/marzban-proto-contract/gen/go/contract"
 )
 
 type marzbanPanelClient struct {
@@ -176,7 +173,7 @@ func (cli *marzbanPanelClient) fetchUsers() (*marzbanUsersResponse, error) {
 	return usersReponseUnmarshalled, nil
 }
 
-func (cli *marzbanPanelClient) GetUsers() ([]*contract.UserInfo, error) {
+func (cli *marzbanPanelClient) GetUsers() ([]*pcl.MarzbanUserInfo, error) {
 	users, err := cli.fetchUsers()
 	if err != nil {
 		return nil, err
@@ -185,7 +182,7 @@ func (cli *marzbanPanelClient) GetUsers() ([]*contract.UserInfo, error) {
 	return users.Users, nil
 }
 
-func (cli *marzbanPanelClient) createUser(userInfo pcl.MarzbanUserConf) (*contract.UserInfo, error) {
+func (cli *marzbanPanelClient) createUser(userInfo pcl.MarzbanUserConf) (*pcl.MarzbanUserInfo, error) {
 	usersApiUrl, err := url.ParseRequestURI(cli.PanelBaseUrl)
 
 	if err != nil {
@@ -228,7 +225,7 @@ func (cli *marzbanPanelClient) createUser(userInfo pcl.MarzbanUserConf) (*contra
 
 	cli.logger.Debug(string(responseBodyStr))
 
-	var userCreateResult *contract.UserInfo
+	var userCreateResult *pcl.MarzbanUserInfo
 	if err := json.Unmarshal(responseBodyStr, &userCreateResult); err != nil {
 		cli.logger.Error(err.Error())
 		return nil, err
@@ -237,29 +234,6 @@ func (cli *marzbanPanelClient) createUser(userInfo pcl.MarzbanUserConf) (*contra
 	return userCreateResult, nil
 }
 
-func (cli *marzbanPanelClient) CreateUser(user *contract.CreateUserInfo) (*contract.UserInfo, error) {
-	vlessProxySetting := pcl.MarzbanProxySettings{
-		Id:   uuid.New(),
-		Flow: "",
-	}
-	nowTime := time.Now()
-	userData := pcl.MarzbanUserConf{
-		Username: user.Username,
-		Proxies: map[pcl.MarzbanProtocolType]pcl.MarzbanProxySettings{
-			pcl.VlessProtocolType: vlessProxySetting,
-		},
-		Inbounds: map[pcl.MarzbanProtocolType][]string{
-			pcl.VlessProtocolType: []string{user.ProxyProtocol},
-		},
-		DataLimit:              0,
-		DataLimitResetStrategy: pcl.NoResetStrategy,
-		Expire:                 0,
-		NextPlan:               nil,
-		Note:                   "",
-		Status:                 pcl.ActiveStatus,
-		OnHoldExpireDuration:   0,
-		OnHoldTimeout:          nowTime,
-	}
-
-	return cli.createUser(userData)
+func (cli *marzbanPanelClient) CreateUser(user pcl.MarzbanUserConf) (*pcl.MarzbanUserInfo, error) {
+	return cli.createUser(user)
 }

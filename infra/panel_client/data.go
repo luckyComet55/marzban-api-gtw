@@ -11,6 +11,30 @@ import (
 type MarzbanLimitResetStrategy int
 type MarzbanUserStatus int
 type MarzbanProtocolType int
+type MarzbanDateTime time.Time
+
+func (dateTime *MarzbanDateTime) UnmarshalJSON(data []byte) error {
+	var dateTimeStr string
+	if err := json.Unmarshal(data, &dateTimeStr); err != nil {
+		return err
+	}
+	if dateTimeStr == "" {
+		dateTime = nil
+		return nil
+	}
+	var err error
+	var dateTimeTime time.Time
+	dateTimeTime, err = time.Parse("2006-01-02T15:04:05.000000", dateTimeStr)
+	if err != nil {
+		return err
+	}
+	*dateTime = MarzbanDateTime(dateTimeTime)
+	return nil
+}
+
+func (dateTime MarzbanDateTime) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Time(dateTime))
+}
 
 const (
 	NoResetStrategy MarzbanLimitResetStrategy = iota
@@ -208,7 +232,14 @@ type MarzbanUserConf struct {
 	NextPlan               map[string]string                            `json:"next_plan"`
 	Note                   string                                       `json:"note"`
 	OnHoldExpireDuration   uint                                         `json:"on_hold_expire_duration"`
-	OnHoldTimeout          time.Time                                    `json:"on_hold_timeout"`
+	OnHoldTimeout          MarzbanDateTime                              `json:"on_hold_timeout"`
 	Status                 MarzbanUserStatus                            `json:"status"`
 	Username               string                                       `json:"username"`
+}
+
+type MarzbanUserInfo struct {
+	MarzbanUserConf
+	ConfigLinks []string        `json:"links"`
+	UsedTraffic int             `json:"used_traffic"`
+	CreatedAt   MarzbanDateTime `json:"created_at"`
 }

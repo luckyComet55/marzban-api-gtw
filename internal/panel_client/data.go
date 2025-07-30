@@ -1,7 +1,7 @@
 package panelclient
 
 import (
-	contract "github.com/luckyComet55/marzban-proto-contract/gen/go/contract"
+	pcl "github.com/luckyComet55/marzban-api-gtw/infra/panel_client"
 )
 
 type marzbanPanelAuthPair struct {
@@ -10,8 +10,8 @@ type marzbanPanelAuthPair struct {
 }
 
 type marzbanUsersResponse struct {
-	Users []*contract.UserInfo `json:"users"`
-	Total uint64               `json:"total"`
+	Users []*pcl.MarzbanUserInfo `json:"users"`
+	Total uint64                 `json:"total"`
 }
 
 type marzbanJwtData struct {
