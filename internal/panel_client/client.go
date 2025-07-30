@@ -185,7 +185,7 @@ func (cli *marzbanPanelClient) GetUsers() ([]*contract.UserInfo, error) {
 	return users.Users, nil
 }
 
-func (cli *marzbanPanelClient) createUser(userInfo marzbanUserConf) (*contract.UserInfo, error) {
+func (cli *marzbanPanelClient) createUser(userInfo pcl.MarzbanUserConf) (*contract.UserInfo, error) {
 	usersApiUrl, err := url.ParseRequestURI(cli.PanelBaseUrl)
 
 	if err != nil {
@@ -238,25 +238,25 @@ func (cli *marzbanPanelClient) createUser(userInfo marzbanUserConf) (*contract.U
 }
 
 func (cli *marzbanPanelClient) CreateUser(user *contract.CreateUserInfo) (*contract.UserInfo, error) {
-	vlessProxySetting := marzbanProxySettings{
+	vlessProxySetting := pcl.MarzbanProxySettings{
 		Id:   uuid.New(),
 		Flow: "",
 	}
 	nowTime := time.Now()
-	userData := marzbanUserConf{
+	userData := pcl.MarzbanUserConf{
 		Username: user.Username,
-		Proxies: map[marzbanProtocolType]marzbanProxySettings{
-			vlessProtocolType: vlessProxySetting,
+		Proxies: map[pcl.MarzbanProtocolType]pcl.MarzbanProxySettings{
+			pcl.VlessProtocolType: vlessProxySetting,
 		},
-		Inbounds: map[marzbanProtocolType][]string{
-			vlessProtocolType: []string{user.ProxyProtocol},
+		Inbounds: map[pcl.MarzbanProtocolType][]string{
+			pcl.VlessProtocolType: []string{user.ProxyProtocol},
 		},
 		DataLimit:              0,
-		DataLimitResetStrategy: noResetStrategy,
+		DataLimitResetStrategy: pcl.NoResetStrategy,
 		Expire:                 0,
 		NextPlan:               nil,
 		Note:                   "",
-		Status:                 activeStatus,
+		Status:                 pcl.ActiveStatus,
 		OnHoldExpireDuration:   0,
 		OnHoldTimeout:          nowTime,
 	}
